@@ -1,4 +1,4 @@
-## **Forward Kinematics Questions with Python Code for questions number 5,6 and 7**
+## **Forward Kinematics Questions with Python Code for questions number 5,6 and 7
 
 Write python functions that computes the forward kinematics using product of exponential f5.	Write python functions that computes the forward kinematics using product of exponential formula in spatial and body frame.
 
@@ -6,7 +6,7 @@ Verify that the product of exponential formula in spatial and body frame provide
 
 Verify using intuition that the forward kinematics formulas provide expected result. Test functions with 4 different sets of joint angles for which you can visualize what should be the solution and verify that the forward kinematics formulas provide the expected result.
     
-## **Results**
+## **Results
 - 1.Test 1 (Random Angles: [-0.788, 2.832, 1.458]):
 The forward kinematics matrices calculated using both the spatial and body frames show slight differences, especially in the position components.
 Possible Reason: This discrepancy might be due to numerical precision errors in the computations, which is common when dealing with matrix exponentiation and successive multiplications in robotic kinematics.
