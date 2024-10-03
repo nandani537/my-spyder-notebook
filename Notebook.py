@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Oct  3 11:00:23 2024
+Created on Thu Oct  3 11:58:40 2024
 
 @author: nandani
 """
@@ -9,86 +9,79 @@ Created on Thu Oct  3 11:00:23 2024
 import numpy as np
 from scipy.linalg import expm
 
-# Compute skew-symmetric matrix for a vector
-def skew(vector):
-    return np.array([[0, -vector[2], vector[1]],
-                     [vector[2], 0, -vector[0]],
-                     [-vector[1], vector[0], 0]])
+def skew_symmetric(v):
+    """Creates a skew-symmetric matrix from a vector"""
+    return np.array([
+        [0, -v[2], v[1]],
+        [v[2], 0, -v[0]],
+        [-v[1], v[0], 0]
+    ])
 
-#  Compute the adjoint transformation matrix for a homogeneous transformation matrix T
-def adjoint(T):
-    R = T[:3, :3]  # Rotation part
-    p = T[:3, 3]   # Position part
-    p_skew = skew(p)
-    Ad_T = np.block([[R, np.zeros((3, 3))],
-                     [p_skew @ R, R]])
-    return Ad_T
+def se3_to_matrix(screw):
+    """Convert an se(3) representation of a twist into a transformation matrix"""
+    omega = screw[:3]
+    v = screw[3:]
+    skew_omega = skew_symmetric(omega)
+    return np.block([
+        [skew_omega, v.reshape(3, 1)],
+        [0, 0, 0, 0]
+    ])
 
-#  Compute the transformation matrix using the twist (screw axis) and joint angle
-def transformation_from_twist(S, theta):
-    w = S[:3]   # Rotational part
-    v = S[3:]   # Translational part
-    skew_w = skew(w)
-    
-    # Calculate the exponential map of the twist
-    mat_exp = expm(np.block([[skew_w, v.reshape(3, 1)], [0, 0, 0, 0]]) * theta)
-    
-    return mat_exp
+def exp_twist(twist, theta):
+    """Calculates the matrix exponential of a twist"""
+    se3_matrix = se3_to_matrix(twist)
+    return expm(se3_matrix * theta)
 
-#  Forward kinematics in spatial frame
-def forward_kinematics_spatial(S_list, M, thetas):
-    T = np.eye(4)  # Identity matrix to start with
-    for i in range(len(thetas)):
-        T = np.dot(T, transformation_from_twist(S_list[i], thetas[i]))  # Multiply transformations
-    return np.dot(T, M)  # Multiply by home configuration matrix
+def forward_kinematics_spatial(M, screw_axes, joint_angles):
+    """Computes the forward kinematics using the product of exponentials formula in the spatial frame."""
+    T = np.eye(4)
+    for i in range(screw_axes.shape[1]):
+        T = T @ exp_twist(screw_axes[:, i], joint_angles[i])
+    return T @ M
 
-#  Convert spatial screw axes to body screw axes using adjoint transformation
-def compute_body_screw_axes(S_list, M):
-    Ad_M_inv = np.linalg.inv(adjoint(M))  # Inverse of adjoint of M
-    B_list = [Ad_M_inv @ S for S in S_list]  # Transform spatial screw axes into body screw axes
-    return B_list
+def forward_kinematics_body(M, screw_axes_body, joint_angles):
+    """Computes the forward kinematics using the product of exponentials formula in the body frame."""
+    T = np.eye(4)
+    for i in range(screw_axes_body.shape[1]):
+        T = T @ exp_twist(screw_axes_body[:, i], joint_angles[i])
+    return M @ T
 
-#  Forward kinematics in body frame
-def forward_kinematics_body(B_list, M, thetas):
-    T = M  # Start with the home configuration matrix
-    for i in reversed(range(len(thetas))):
-        T = np.dot(transformation_from_twist(B_list[i], thetas[i]), T)  # Notice the multiplication order
-    return T
+# Example definitions for a simple 3-DOF manipulator
+M = np.array([
+    [1, 0, 0, 1],
+    [0, 1, 0, 2],
+    [0, 0, 1, 3],
+    [0, 0, 0, 1]
+])  # Home configuration of the end-effector
 
-# Example of  screw axes (replace with actual values as per the robot's configuration)
-S_list = [
-    np.array([0, 0, 1, 0, 0, 0]),      # S1
-    np.array([1, 0, 0, 0, 131.56, 0]), # S2
-    np.array([0, 0, 1, 173.8, -131.56, 0]), # S3
-    np.array([1, 0, 0, 0, 350, 0]),    # S4
-    np.array([0, 0, 1, 350, -66.39, 0]), # S5
-    np.array([1, 0, 0, 0, 436.6, 0])   # S6
+screw_axes_spatial = np.array([
+    [0, 0, 1, 0, 0, 0],
+    [0, 1, 0, -2, 0, 0],
+    [1, 0, 0, 0, 3, 0]
+]).T  # Screw axes in the spatial frame
+
+screw_axes_body = np.array([
+    [0, 0, 1, 0, 2, 0],
+    [0, 1, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0, -3]
+]).T  # Screw axes in the body frame
+
+# Generate random joint angles for testing
+np.random.seed(42)
+test_joint_angles = [
+    np.random.uniform(-np.pi, np.pi, 3),
+    np.random.uniform(-np.pi/2, np.pi/2, 3),
+    [0, 0, 0],
+    [np.pi/2, -np.pi/4, np.pi/6]
 ]
 
-# Home configuration matrix M
-M = np.array([[1, 0, 0, 0.4366],
-              [0, 1, 0, 0],
-              [0, 0, 1, 0.280],
-              [0, 0, 0, 1]])
-
-# Generate 3-4 sets of random joint angles
-random_joint_angles = [np.random.uniform(low=-np.pi, high=np.pi, size=6) for _ in range(4)]
-
-# Convert spatial screw axes to body screw axes
-B_list = compute_body_screw_axes(S_list, M)
-
-# Test forward kinematics for each set of random joint angles
-for i, thetas in enumerate(random_joint_angles):
-    print(f"\nTest {i+1}:")
-    print(f"Joint angles: {thetas}")
-
-    # Compute forward kinematics in spatial frame
-    T_spatial = forward_kinematics_spatial(S_list, M, thetas)
+# Compare results for each set of joint angles
+for i, angles in enumerate(test_joint_angles):
+    T_spatial = forward_kinematics_spatial(M, screw_axes_spatial, angles)
+    T_body = forward_kinematics_body(M, screw_axes_body, angles)
     
-    # Compute forward kinematics in body frame
-    T_body = forward_kinematics_body(B_list, M, thetas)
-
-    # Print and check if both transformations are approximately equal
-    print(f"Transformation in spatial frame:\n{T_spatial}")
-    print(f"Transformation in body frame:\n{T_body}")
-    print("Are both transformations approximately equal?", np.allclose(T_spatial, T_body))
+    print(f"Test {i + 1}: Joint angles = {angles}")
+    print("Spatial frame FK:\n", T_spatial)
+    print("Body frame FK:\n", T_body)
+    print("Difference:\n", T_spatial - T_body)
+    print("\n")
